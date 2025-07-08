@@ -3,8 +3,8 @@ import time
 import base64
 import pandas as pd
 import plotly.express as px
-#from fpdf import FPDF
-#import tempfile
+from fpdf import FPDF
+import tempfile
 
 # --- Emission Factors in kg CO2 per kg ---
 EMISSION_FACTORS = {
@@ -120,50 +120,63 @@ with st.expander("🧪 Input Product Details", expanded=True):
 
 
 
-# def generate_pdf(result, alt_data, packaging_tip):
-#     pdf = FPDF()
-#     pdf.add_page()
-#     pdf.set_font("Arial", "B", 16)
-#     pdf.set_text_color(0, 102, 102)
-#
-#     pdf.cell(200, 10, "EcoImpact Analysis Report", ln=True, align='C')
-#     pdf.ln(10)
-#
-#     pdf.set_font("Arial", "", 12)
-#     pdf.set_text_color(0, 0, 0)
-#     pdf.cell(0, 10, f"Product: {result['Product']}", ln=True)
-#     pdf.cell(0, 10, f"Plastic Type: {result['Plastic Type']}", ln=True)
-#     pdf.cell(0, 10, f"Weight: {result['Weight (g)']} grams", ln=True)
-#     pdf.cell(0, 10, f"Recyclable: {result['Recyclable']}", ln=True)
-#     pdf.cell(0, 10, f"Carbon Footprint: {result['Carbon Footprint (kg CO2)']} kg CO2", ln=True)
-#     pdf.ln(5)
-#
-#     pdf.set_font("Arial", "B", 12)
-#     pdf.cell(0, 10, "Packaging Tip:", ln=True)
-#     pdf.set_font("Arial", "", 12)
-#     pdf.multi_cell(0, 10, packaging_tip)
-#     pdf.ln(5)
-#
-#     if result['Suggestions']:
-#         pdf.set_font("Arial", "B", 12)
-#         pdf.cell(0, 10, "Sustainability Suggestions:", ln=True)
-#         pdf.set_font("Arial", "", 12)
-#         for s in result['Suggestions']:
-#             pdf.multi_cell(0, 10, f"- {s}")
-#         pdf.ln(5)
-#
-#     pdf.set_font("Arial", "B", 12)
-#     pdf.cell(0, 10, "Alternative Materials (Lower Emissions):", ln=True)
-#     pdf.set_font("Arial", "", 12)
-#     for alt_type, alt_emission in alt_data:
-#         savings = round(result['Carbon Footprint (kg CO2)'] - alt_emission, 2)
-#         if savings > 0:
-#             pdf.cell(0, 10, f"{alt_type}: {alt_emission} kg CO₂ → Save {savings} kg CO₂", ln=True)
-#
-#     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-#     pdf.output(temp_file.name)
-#     return temp_file.name
+def generate_pdf(result, alt_data, packaging_tip):
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 16)
+            self.set_text_color(0, 102, 102)
+            self.cell(200, 10, "EcoImpact Analysis Report", ln=True, align='C')
+            self.ln(10)
 
+    # Create PDF with UTF-8 support
+    pdf = PDF()
+    pdf.add_page()
+
+    # Replace all Unicode characters with ASCII equivalents
+    packaging_tip = (packaging_tip
+                     .replace('₂', '2')
+                     .replace('✅', '✓')
+                     .replace('💡', '*')
+                     .replace('→', '->'))
+
+    # Product details
+    pdf.set_font("Arial", size=12)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 10, f"Product: {result['Product']}", ln=True)
+    pdf.cell(0, 10, f"Plastic Type: {result['Plastic Type']}", ln=True)
+    pdf.cell(0, 10, f"Weight: {result['Weight (g)']} grams", ln=True)
+    pdf.cell(0, 10, f"Recyclable: {result['Recyclable']}", ln=True)
+    pdf.cell(0, 10, f"Carbon Footprint: {result['Carbon Footprint (kg CO2)']} kg CO2", ln=True)
+    pdf.ln(5)
+
+    # Packaging tip
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Packaging Tip:", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, packaging_tip)
+    pdf.ln(5)
+
+    # Suggestions
+    if result['Suggestions']:
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "Sustainability Suggestions:", ln=True)
+        pdf.set_font("Arial", size=12)
+        for s in result['Suggestions']:
+            pdf.multi_cell(0, 10, f"- {s}")
+        pdf.ln(5)
+
+    # Alternatives
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Alternative Materials (Lower Emissions):", ln=True)
+    pdf.set_font("Arial", size=12)
+    for alt_type, alt_emission in alt_data:
+        savings = round(result['Carbon Footprint (kg CO2)'] - alt_emission, 2)
+        if savings > 0:
+            pdf.cell(0, 10, f"{alt_type}: {alt_emission} kg CO2 -> Save {savings} kg CO2", ln=True)
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(temp_file.name)
+    return temp_file.name
 
 # --- Display Results ---
 if submitted:
@@ -262,15 +275,15 @@ if submitted:
     st.dataframe(filtered_df, use_container_width=True)
 
     # --- PDF Export ---
-    # pdf_path = generate_pdf(result, alt_data, suggest_packaging_tips(plastic_type))
-    #
-    # with open(pdf_path, "rb") as f:
-    #     st.download_button(
-    #         label="📄 Download Report as PDF",
-    #         data=f,
-    #         file_name=f"{result['Product'].replace(' ', '_')}_EcoImpact_Report.pdf",
-    #         mime="application/pdf"
-    #     )
+    pdf_path = generate_pdf(result, alt_data, suggest_packaging_tips(plastic_type))
+    
+    with open(pdf_path, "rb") as f:
+        st.download_button(
+            label="📄 Download Report as PDF",
+            data=f,
+            file_name=f"{result['Product'].replace(' ', '_')}_EcoImpact_Report.pdf",
+            mime="application/pdf"
+        )
 
 # --- Plastic Lifecycle Visualizer ---
 st.markdown("### ♻️ Plastic Lifecycle Visualizer")
